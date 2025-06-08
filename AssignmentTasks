@@ -6,7 +6,6 @@ Query: Output the start and end dates of projects, ordered by:
 Project duration (ascending).
 Start date (if durations are equal).
 
-
 WITH ProjectGroups AS (
     SELECT 
         Start_Date,
