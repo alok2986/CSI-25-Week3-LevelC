@@ -1,0 +1,385 @@
+Task 1
+Projects Table Analysis
+Given a table Projects with columns: Task_ID (Integer), Start_Date (Date), End_Date (Date). The difference between End_Date and Start_Date is always 1 day.
+If tasks have consecutive End_Date values, they belong to the same project.
+Query: Output the start and end dates of projects, ordered by:
+Project duration (ascending).
+Start date (if durations are equal).
+
+
+WITH ProjectGroups AS (
+    SELECT 
+        Start_Date,
+        End_Date,
+        DATE_SUB(Start_Date, INTERVAL ROW_NUMBER() OVER (ORDER BY Start_Date) DAY) AS GroupDate
+    FROM Projects
+)
+SELECT 
+    MIN(Start_Date) AS Project_Start_Date,
+    MAX(End_Date) AS Project_End_Date
+FROM ProjectGroups
+GROUP BY GroupDate
+ORDER BY 
+    DATEDIFF(MAX(End_Date), MIN(Start_Date)),
+    MIN(Start_Date);
+
+
+Task 2
+Students with Better-Paid Friends
+Tables:
+Students (ID, Name)
+Friends (ID, Friend_ID)
+Packages (ID, Salary)
+Query: Output names of students whose best friends have higher salaries. Order results by the friend's salary.
+
+SELECT s.Name
+FROM Students s
+JOIN Friends f ON s.ID = f.ID
+JOIN Packages p1 ON s.ID = p1.ID
+JOIN Packages p2 ON f.Friend_ID = p2.ID
+WHERE p2.Salary > p1.Salary
+ORDER BY p2.Salary;
+
+
+Task 3
+Symmetric Pairs
+Table Functions (X, Y).
+A pair (X₁, Y₁) and (X₂, Y₂) is symmetric if X1 = Y2 and X2 = Y1.
+Query: Output all symmetric pairs, ordered by ascending X.
+
+
+WITH SymmetricPairs AS (
+    SELECT f1.X, f1.Y
+    FROM Functions f1
+    JOIN Functions f2 ON f1.X = f2.Y AND f1.Y = f2.X
+    WHERE f1.X < f1.Y
+    
+    UNION
+    
+    SELECT X, Y
+    FROM Functions
+    WHERE X = Y
+    GROUP BY X, Y
+    HAVING COUNT(*) > 1
+)
+SELECT DISTINCT X, Y
+FROM SymmetricPairs
+ORDER BY X;
+
+
+Task 4
+Contest Analytics
+Tables:
+Contests, Colleges, Challenges, View_Stats, Submission_Stats.
+Query: Print contest_id, hacker_id, name, and sums of:
+Total submissions
+Accepted submissions
+Total views
+Unique views
+Exclude contests where all sums are zero. Order by contest_id.
+
+SELECT 
+    c.contest_id,
+    c.hacker_id,
+    c.name,
+    SUM(IFNULL(ss.total_submissions, 0)) AS total_submissions,
+    SUM(IFNULL(ss.total_accepted_submissions, 0)) AS total_accepted_submissions,
+    SUM(IFNULL(vs.total_views, 0)) AS total_views,
+    SUM(IFNULL(vs.total_unique_views, 0)) AS total_unique_views
+FROM Contests c
+JOIN Colleges col ON c.contest_id = col.contest_id
+JOIN Challenges ch ON col.college_id = ch.college_id
+LEFT JOIN (
+    SELECT challenge_id, SUM(total_submissions) AS total_submissions, 
+           SUM(total_accepted_submissions) AS total_accepted_submissions
+    FROM Submission_Stats
+    GROUP BY challenge_id
+) ss ON ch.challenge_id = ss.challenge_id
+LEFT JOIN (
+    SELECT challenge_id, SUM(total_views) AS total_views, 
+           SUM(total_unique_views) AS total_unique_views
+    FROM View_Stats
+    GROUP BY challenge_id
+) vs ON ch.challenge_id = vs.challenge_id
+GROUP BY c.contest_id, c.hacker_id, c.name
+HAVING total_submissions + total_accepted_submissions + total_views + total_unique_views > 0
+ORDER BY c.contest_id;
+
+
+Task 5
+Hacker Daily Activity
+For a contest (March 1–15, 2016):
+Query: For each day, output:
+Total unique hackers who submitted every day from day 1.
+The hacker with the most submissions (lowest hacker_id if tied).
+Order by date.
+
+
+WITH DailyHackers AS (
+    SELECT 
+        submission_date, 
+        hacker_id,
+        COUNT(*) AS submissions
+    FROM Submissions
+    GROUP BY submission_date, hacker_id
+),
+DailyMax AS (
+    SELECT 
+        submission_date,
+        MAX(submissions) AS max_submissions
+    FROM DailyHackers
+    GROUP BY submission_date
+),
+DailyBest AS (
+    SELECT 
+        dh.submission_date,
+        MIN(dh.hacker_id) AS hacker_id
+    FROM DailyHackers dh
+    JOIN DailyMax dm ON dh.submission_date = dm.submission_date AND dh.submissions = dm.max_submissions
+    GROUP BY dh.submission_date
+),
+ConsistentHackers AS (
+    SELECT 
+        s1.submission_date,
+        s1.hacker_id,
+        COUNT(DISTINCT s2.submission_date) AS days_consistent
+    FROM Submissions s1
+    JOIN Submissions s2 ON s1.hacker_id = s2.hacker_id 
+                       AND s2.submission_date <= s1.submission_date
+    GROUP BY s1.submission_date, s1.hacker_id
+    HAVING days_consistent = DATEDIFF(s1.submission_date, '2016-03-01') + 1
+),
+DailyCount AS (
+    SELECT 
+        submission_date,
+        COUNT(DISTINCT hacker_id) AS consistent_count
+    FROM ConsistentHackers
+    GROUP BY submission_date
+)
+SELECT 
+    dc.submission_date,
+    dc.consistent_count,
+    db.hacker_id,
+    h.name
+FROM DailyCount dc
+JOIN DailyBest db ON dc.submission_date = db.submission_date
+JOIN Hackers h ON db.hacker_id = h.hacker_id
+ORDER BY dc.submission_date;
+
+
+Task 6
+Manhattan Distance
+Table STATION with LAT_N (latitude) and LONG_W (longitude).
+Query: Calculate the Manhattan Distance between:
+P1: (min LAT_N, min LONG_W)
+P2: (max LAT_N, max LONG_W)
+Round to 4 decimal places.
+
+SELECT 
+    ROUND(ABS(MIN(LAT_N) - MAX(LAT_N)) + ABS(MIN(LONG_W) - MAX(LONG_W)), 4) AS Manhattan_Distance
+FROM STATION;
+
+
+Task 7
+Prime Numbers ≤ 1000
+Query: Print all prime numbers ≤ 1000 in one line, separated by &.
+
+
+WITH RECURSIVE Numbers AS (
+    SELECT 2 AS num
+    UNION ALL
+    SELECT num + 1 FROM Numbers WHERE num < 1000
+),
+Primes AS (
+    SELECT n1.num AS prime
+    FROM Numbers n1
+    WHERE NOT EXISTS (
+        SELECT 1 FROM Numbers n2 
+        WHERE n2.num > 1 AND n2.num < n1.num AND n1.num % n2.num = 0
+    )
+)
+SELECT GROUP_CONCAT(prime ORDER BY prime SEPARATOR '&') AS primes
+FROM Primes;
+
+
+Task 8
+Occupations Pivot
+Table OCCUPATIONS (Name, Occupation).
+Query: Pivot names under columns Doctor, Professor, Singer, Actor, sorted alphabetically. Use NULL for empty slots.
+
+SET @d=0, @p=0, @s=0, @a=0;
+SELECT 
+    MAX(Doctor) AS Doctor,
+    MAX(Professor) AS Professor,
+    MAX(Singer) AS Singer,
+    MAX(Actor) AS Actor
+FROM (
+    SELECT 
+        CASE WHEN Occupation='Doctor' THEN Name END AS Doctor,
+        CASE WHEN Occupation='Professor' THEN Name END AS Professor,
+        CASE WHEN Occupation='Singer' THEN Name END AS Singer,
+        CASE WHEN Occupation='Actor' THEN Name END AS Actor,
+        CASE 
+            WHEN Occupation='Doctor' THEN @d:=@d+1
+            WHEN Occupation='Professor' THEN @p:=@p+1
+            WHEN Occupation='Singer' THEN @s:=@s+1
+            WHEN Occupation='Actor' THEN @a:=@a+1
+        END AS row_num
+    FROM OCCUPATIONS
+    ORDER BY Name
+) AS temp
+GROUP BY row_num;
+
+Task 9
+Binary Tree Node Types
+Table BST (N, P), where P is the parent of N.
+Query: Classify nodes as:
+Root: No parent.
+Leaf: No children.
+Inner: Neither.
+Order by N.
+
+SELECT 
+    N,
+    CASE 
+        WHEN P IS NULL THEN 'Root'
+        WHEN N IN (SELECT P FROM BST) THEN 'Inner'
+        ELSE 'Leaf'
+    END AS NodeType
+FROM BST
+ORDER BY N;
+
+
+Task 10
+Company Hierarchy
+Tables: Company, Lead_Manager, Senior_Manager, Manager, Employee.
+Query: For each company, output:
+company_code, founder
+Counts of lead managers, senior managers, managers, employees.
+Order by company_code (non-numeric sort).
+
+
+SELECT 
+    c.company_code,
+    c.founder,
+    COUNT(DISTINCT lm.lead_manager_code) AS lead_managers,
+    COUNT(DISTINCT sm.senior_manager_code) AS senior_managers,
+    COUNT(DISTINCT m.manager_code) AS managers,
+    COUNT(DISTINCT e.employee_code) AS employees
+FROM Company c
+LEFT JOIN Lead_Manager lm ON c.company_code = lm.company_code
+LEFT JOIN Senior_Manager sm ON lm.lead_manager_code = sm.lead_manager_code AND c.company_code = sm.company_code
+LEFT JOIN Manager m ON sm.senior_manager_code = m.senior_manager_code AND c.company_code = m.company_code
+LEFT JOIN Employee e ON m.manager_code = e.manager_code AND c.company_code = e.company_code
+GROUP BY c.company_code, c.founder
+ORDER BY c.company_code;
+
+
+Task 11
+Students with Better-Paid Friends
+Tables:
+Students (ID, Name)
+Friends (ID, Friend_ID)
+Packages (ID, Salary)
+Query: Output names of students whose best friends have higher salaries. Order results by the friend's salary.
+
+SELECT s.Name
+FROM Students s
+JOIN Friends f ON s.ID = f.ID
+JOIN Packages p1 ON s.ID = p1.ID
+JOIN Packages p2 ON f.Friend_ID = p2.ID
+WHERE p2.Salary > p1.Salary
+ORDER BY p2.Salary;
+
+
+Task 12–20
+Advanced Tasks
+12. Cost ratio of job families (India vs. international).
+
+-- Assuming simulation_data table has columns: job_family, country, cost
+SELECT 
+    job_family,
+    ROUND(SUM(CASE WHEN country = 'India' THEN cost ELSE 0 END) / SUM(cost) * 100, 2) AS india_percentage,
+    ROUND(SUM(CASE WHEN country != 'India' THEN cost ELSE 0 END) / SUM(cost) * 100, 2) AS international_percentage
+FROM simulation_data
+GROUP BY job_family;
+
+
+13. Month-on-month cost/revenue ratio per BU.
+
+-- Assuming financial_data table has columns: business_unit, month, cost, revenue
+SELECT 
+    business_unit,
+    month,
+    ROUND(cost / revenue, 2) AS cost_revenue_ratio
+FROM financial_data
+ORDER BY business_unit, month;
+
+
+14. Sub-band headcount percentages (no joins/subqueries).
+
+-- Assuming employees table has columns: sub_band
+SELECT 
+    sub_band,
+    COUNT(*) AS headcount,
+    ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM employees), 2) AS percentage
+FROM employees
+GROUP BY sub_band;
+
+
+15. Top 5 employees by salary (no ORDER BY).
+
+-- Using LIMIT with a subquery to avoid ORDER BY
+SELECT name, salary
+FROM employees
+WHERE salary IN (
+    SELECT salary FROM employees
+    GROUP BY salary
+    LIMIT 5
+);
+
+
+16. Swap column values without a temporary variable.
+
+-- Assuming table has columns: a, b
+UPDATE table_name
+SET a = b, b = a;
+
+
+17. Create a user with db_owner permissions.
+
+-- SQL Server syntax
+CREATE LOGIN new_user WITH PASSWORD = 'password';
+CREATE USER new_user FOR LOGIN new_user;
+ALTER ROLE db_owner ADD MEMBER new_user;
+
+
+18. Weighted average employee cost by BU (monthly).
+
+-- Assuming employees table has columns: business_unit, month, salary
+SELECT 
+    business_unit,
+    month,
+    SUM(salary) / COUNT(*) AS weighted_avg_cost
+FROM employees
+GROUP BY business_unit, month
+ORDER BY business_unit, month;
+
+
+19. Salary calculation error due to broken keyboard (actual vs. miscalculated average).
+
+SELECT 
+    CEIL(AVG(salary) - AVG(REPLACE(salary, '0', ''))) AS error
+FROM EMPLOYEES;
+
+
+20. Copy new data between tables without indicators.
+
+-- Assuming no indicator for new data, copying all data
+INSERT INTO target_table (col1, col2, ...)
+SELECT col1, col2, ...
+FROM source_table
+WHERE NOT EXISTS (
+    SELECT 1 FROM target_table 
+    WHERE target_table.key_column = source_table.key_column
+);
